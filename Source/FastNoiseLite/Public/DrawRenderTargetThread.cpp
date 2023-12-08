@@ -16,10 +16,10 @@ FDrawRenderTargetThread::FDrawRenderTargetThread(TWeakObjectPtr<UFastNoiseObject
 	Canvas = InCanvas;
 	// RenderTargetResource = InRenderTargetResource;
 
-	AsyncTask(ENamedThreads::GameThread,[]()
-	{
-		UE_LOG(LogTemp, Warning, TEXT("Game Thread Id:%d"),FPlatformTLS::GetCurrentThreadId());
-	});
+	// AsyncTask(ENamedThreads::GameThread,[]()
+	// {
+	// 	UE_LOG(LogTemp, Warning, TEXT("Game Thread Id:%d"),FPlatformTLS::GetCurrentThreadId());
+	// });
 	
 	ExecThread = FRunnableThread::Create(this,TEXT("DrawRenderTargetFromNoiseData"));
 	
@@ -27,32 +27,35 @@ FDrawRenderTargetThread::FDrawRenderTargetThread(TWeakObjectPtr<UFastNoiseObject
 
 void FDrawRenderTargetThread::Exit()
 {
-	UE_LOG(LogTemp, Warning, TEXT("[DrawRenderTargetThread->Exit]cost %f time"),FPlatformTime::Seconds() - start_time);
 	delete this;
 }
 
 bool FDrawRenderTargetThread::Init()
 {
-	start_time = FPlatformTime::Seconds();
+	start_time = FPlatformTime::ToMilliseconds64(FPlatformTime::Cycles64());
 	return true;
 }
 
 uint32 FDrawRenderTargetThread::Run()
 {
-	UE_LOG(LogTemp, Warning, TEXT("FDrawRenderTargetThread Id:%d"),FPlatformTLS::GetCurrentThreadId());
 
 	AsyncTask(ENamedThreads::RHIThread,[this]()
 	{
 		this->RenderTargetResource = RenderTarget->GetRenderTargetResource();
 	});
 
+	// RenderTargetResource = RenderTarget->GetRenderTargetResource();
 	
 	while (!RenderTargetResource)
 	{
 		// UE_LOG(LogTemp, Warning, TEXT("[DrawRenderTargetThread->Run]wait render target resource"));
 		FPlatformProcess::Sleep(0.01f);
 	}
-	
+
+	double time = FPlatformTime::ToMilliseconds64(FPlatformTime::Cycles64());
+	UE_LOG(LogTemp, Warning, TEXT("[DrawRenderTargetThread->Exit]cost %fms time to wait RenderTargetResource"),time - start_time);
+	start_time = time;
+
 	
 	if (!RenderTarget.IsValid())
 	{
@@ -72,7 +75,7 @@ uint32 FDrawRenderTargetThread::Run()
 		World,
 		World->GetFeatureLevel(),
 		// Draw immediately so that interleaved SetVectorParameter (etc) function calls work as expected
-		FCanvas::CDM_ImmediateDrawing);
+		FCanvas::CDM_DeferDrawing);
 
 	
 	
@@ -95,16 +98,28 @@ uint32 FDrawRenderTargetThread::Run()
 			Canvas->DrawItem(BoxItem);
 		}
 	}
-	
-	
 
 	
-	UE_LOG(LogTemp, Warning, TEXT("[DrawRenderTargetThread->Run]draw finish"));
+	time = FPlatformTime::ToMilliseconds64(FPlatformTime::Cycles64());
+	UE_LOG(LogTemp, Warning, TEXT("[DrawRenderTargetThread->Exit]cost %fms time to fill data"),time - start_time);
+	start_time = time;
+
+	
+	UE_LOG(LogTemp, Warning, TEXT("[DrawRenderTargetThread->Run]Canvas->Canvas->GetRenderTarget():%s"),Canvas->Canvas->GetRenderTarget()?TEXT("TRUE"):TEXT("FALSE"));
+	
+	if (Canvas->Canvas->GetRenderTarget())
+	{
+		Canvas->Canvas->Flush_GameThread(true);
+	}
+	
+	time = FPlatformTime::ToMilliseconds64(FPlatformTime::Cycles64());
+	UE_LOG(LogTemp, Warning, TEXT("[DrawRenderTargetThread->Exit]cost %fms time to flush render target"),time - start_time);
+
+	
 
 	ENQUEUE_RENDER_COMMAND(FlushDeferredResourceUpdateCommand)(
 		[this](FRHICommandListImmediate& RHICmdList)
 		{
-			UE_LOG(LogTemp, Warning, TEXT("[DrawRenderTargetThread->operator()]Flush in RHI"));
 			RenderTargetResource->FlushDeferredResourceUpdate(RHICmdList);
 		});
 
@@ -122,6 +137,5 @@ FDrawRenderTargetThread::~FDrawRenderTargetThread()
 		ExecThread->Kill();
 		delete ExecThread;
 	}
-	UE_LOG(LogTemp, Warning, TEXT("[DrawRenderTargetThread->~FDrawRenderTargetThread]delete finish"));
 }
 
