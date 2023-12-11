@@ -113,3 +113,11 @@ struct FNoiseCreateParams
 	UPROPERTY(EditAnywhere,BlueprintReadWrite,Category="NoiseCreateParam|Size")
 	FIntVector Size3D = FIntVector(32);	
 };
+
+
+UENUM()
+enum class EDrawThreadMethod : uint8
+{
+	EMethod1,
+	EMethod2
+};

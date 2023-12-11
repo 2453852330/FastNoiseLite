@@ -5,40 +5,16 @@
 #include "FastNoiseObject.h"
 #include "Engine/Canvas.h"
 #include "Engine/TextureRenderTarget2D.h"
+#include "Kismet/KismetRenderingLibrary.h"
 
-FDrawRenderTargetThread::FDrawRenderTargetThread(TWeakObjectPtr<UFastNoiseObject> NoiseObject,
-	TWeakObjectPtr<UTextureRenderTarget2D> RT,TWeakObjectPtr<UCanvas> InCanvas
-	// FTextureRenderTargetResource* InRenderTargetResource
-	)
+void FDrawRenderTargetThread::Draw1()
 {
-	FastNoiseObject = NoiseObject;
-	RenderTarget = RT;
-	Canvas = InCanvas;
-	// RenderTargetResource = InRenderTargetResource;
 
-	// AsyncTask(ENamedThreads::GameThread,[]()
-	// {
-	// 	UE_LOG(LogTemp, Warning, TEXT("Game Thread Id:%d"),FPlatformTLS::GetCurrentThreadId());
-	// });
+	if (!RenderTarget.IsValid())
+	{
+		return;
+	}
 	
-	ExecThread = FRunnableThread::Create(this,TEXT("DrawRenderTargetFromNoiseData"));
-	
-}
-
-void FDrawRenderTargetThread::Exit()
-{
-	delete this;
-}
-
-bool FDrawRenderTargetThread::Init()
-{
-	start_time = FPlatformTime::ToMilliseconds64(FPlatformTime::Cycles64());
-	return true;
-}
-
-uint32 FDrawRenderTargetThread::Run()
-{
-
 	AsyncTask(ENamedThreads::RHIThread,[this]()
 	{
 		this->RenderTargetResource = RenderTarget->GetRenderTargetResource();
@@ -52,15 +28,7 @@ uint32 FDrawRenderTargetThread::Run()
 		FPlatformProcess::Sleep(0.01f);
 	}
 
-	double time = FPlatformTime::ToMilliseconds64(FPlatformTime::Cycles64());
-	UE_LOG(LogTemp, Warning, TEXT("[DrawRenderTargetThread->Exit]cost %fms time to wait RenderTargetResource"),time - start_time);
-	start_time = time;
 
-	
-	if (!RenderTarget.IsValid())
-	{
-		return -1;
-	}
 
 	int32 X = RenderTarget->SizeX;
 	int32 Y = RenderTarget->SizeY;
@@ -86,7 +54,7 @@ uint32 FDrawRenderTargetThread::Run()
 	FCanvasBoxItem BoxItem(FVector2d::ZeroVector,FVector2d(1.f));
 	BoxItem.LineThickness = 1.f;
 
-	UE_LOG(LogTemp, Warning, TEXT("[DrawRenderTargetThread->Run]start draw"));
+
 	
 	for (int32 i = 0; i < X; ++i)
 	{
@@ -95,34 +63,149 @@ uint32 FDrawRenderTargetThread::Run()
 			BoxItem.Position = FVector2d(i, j);
 			noise_value = FastNoiseObject->NoiseLite.GetNoise<float>(i, j);
 			BoxItem.SetColor(FLinearColor(noise_value, noise_value, noise_value, 1.f));
-			Canvas->DrawItem(BoxItem);
+			BoxItem.Draw(NewCanvas);
 		}
 	}
 
 	
-	time = FPlatformTime::ToMilliseconds64(FPlatformTime::Cycles64());
-	UE_LOG(LogTemp, Warning, TEXT("[DrawRenderTargetThread->Exit]cost %fms time to fill data"),time - start_time);
-	start_time = time;
-
-	
-	UE_LOG(LogTemp, Warning, TEXT("[DrawRenderTargetThread->Run]Canvas->Canvas->GetRenderTarget():%s"),Canvas->Canvas->GetRenderTarget()?TEXT("TRUE"):TEXT("FALSE"));
-	
-	if (Canvas->Canvas->GetRenderTarget())
-	{
-		Canvas->Canvas->Flush_GameThread(true);
-	}
-	
-	time = FPlatformTime::ToMilliseconds64(FPlatformTime::Cycles64());
-	UE_LOG(LogTemp, Warning, TEXT("[DrawRenderTargetThread->Exit]cost %fms time to flush render target"),time - start_time);
 
 	
 
 	ENQUEUE_RENDER_COMMAND(FlushDeferredResourceUpdateCommand)(
 		[this](FRHICommandListImmediate& RHICmdList)
 		{
+			Canvas->Canvas->Flush_GameThread(true);
 			RenderTargetResource->FlushDeferredResourceUpdate(RHICmdList);
+			UE_LOG(LogTemp, Warning, TEXT("[DrawRenderTargetThread->Draw1]cost %f ms"),FPlatformTime::ToMilliseconds64(FPlatformTime::Cycles64()) - start_time);
+			delete this;
 		});
+}
 
+void FDrawRenderTargetThread::Draw2()
+{
+	if (!RenderTarget.IsValid())
+	{
+		return;
+	}
+
+	AsyncTask(ENamedThreads::RHIThread,[this]()
+		{
+			// this->RenderTargetResource = RenderTarget->GetRenderTargetResource();a
+			// UKismetRenderingLibrary::ClearRenderTarget2D(FastNoiseObject.Get(),RenderTarget.Get());
+			RenderTargetResource = RenderTarget->GetRenderTargetResource();
+		});
+	
+	while (!RenderTargetResource)
+	{
+		FPlatformProcess::Sleep(0.01f);
+	}
+	
+
+	
+	int32 SizeX = RenderTarget->SizeX;
+	int32 SizeY = RenderTarget->SizeY;
+	
+	
+	UWorld* World = FastNoiseObject->GetWorld();
+	World->FlushDeferredParameterCollectionInstanceUpdates();
+
+	
+	FCanvas* NewCanvas = new FCanvas(RenderTargetResource,nullptr, World,World->GetFeatureLevel(),
+			// Draw immediately so that interleaved SetVectorParameter (etc) function calls work as expected
+			FCanvas::CDM_DeferDrawing);
+
+	// init the UCanvas use FCanvas
+	Canvas->Init(SizeX, SizeY, nullptr, NewCanvas);
+
+
+	float color_value = 0.f;
+	
+	FBatchedElements* BatchedElements = Canvas->Canvas->GetBatchedElements(FCanvas::ET_Line);
+	FHitProxyId HitProxyId = Canvas->Canvas->GetHitProxyId();
+
+	for (int32 i = 0; i < SizeX; ++i)
+	{
+		for (int32 j = 0; j < SizeY; ++j)
+		{
+			color_value = FastNoiseObject->NoiseLite.GetNoise<float>(i,j);
+			// BoxItem.Position.X = i;
+			// BoxItem.Position.Y = j;
+			// draw_color.G = color_value;
+			// BoxItem.SetColor(draw_color);
+			// Canvas->DrawItem(BoxItem);
+			// BatchedElements->AddPoint(FVector(i,j,0.f),50.f,FLinearColor(0.f,color_value,0.f),HitProxyId);
+
+			BatchedElements->AddLine(FVector(i,j,0.f),FVector(i,j,0.f),FLinearColor(0.f,color_value,0.f),HitProxyId,Thickness);
+		}
+	}
+
+	
+
+	ENQUEUE_RENDER_COMMAND(FlushDeferredResourceUpdateCommand)(
+		[this](FRHICommandListImmediate& RHICmdList)
+		{
+			Canvas->Canvas->Flush_GameThread(true);
+			RenderTargetResource->FlushDeferredResourceUpdate(RHICmdList);
+			UE_LOG(LogTemp, Warning, TEXT("[DrawRenderTargetThread->Draw2]cost %f ms"),FPlatformTime::ToMilliseconds64(FPlatformTime::Cycles64()) - start_time);
+			delete this;
+		});
+}
+
+
+
+FDrawRenderTargetThread::FDrawRenderTargetThread(TWeakObjectPtr<UFastNoiseObject> NoiseObject,
+                                                 TWeakObjectPtr<UTextureRenderTarget2D> RT,TWeakObjectPtr<UCanvas> InCanvas,
+                                                 // FTextureRenderTargetResource* InRenderTargetResource,
+                                                 EDrawThreadMethod InDrawThreadMethod,float InThickness
+)
+{
+	FastNoiseObject = NoiseObject;
+	RenderTarget = RT;
+	Canvas = InCanvas;
+	DrawMethod = InDrawThreadMethod;
+	Thickness = InThickness;
+	// RenderTargetResource = InRenderTargetResource;
+
+	// AsyncTask(ENamedThreads::GameThread,[]()
+	// {
+	// 	UE_LOG(LogTemp, Warning, TEXT("Game Thread Id:%d"),FPlatformTLS::GetCurrentThreadId());
+	// });
+
+	UE_LOG(LogTemp, Warning, TEXT("[DrawRenderTargetThread->FDrawRenderTargetThread] start draw thread"));
+	
+	ExecThread = FRunnableThread::Create(this,TEXT("DrawRenderTargetFromNoiseData"));
+	
+}
+
+void FDrawRenderTargetThread::Exit()
+{
+	
+}
+
+
+bool FDrawRenderTargetThread::Init()
+{
+	start_time = FPlatformTime::ToMilliseconds64(FPlatformTime::Cycles64());
+	return true;
+}
+
+uint32 FDrawRenderTargetThread::Run()
+{
+	// Draw1();
+	switch (DrawMethod)
+	{
+	case EDrawThreadMethod::EMethod1:
+		{
+			Draw1();
+			break;
+		}
+	case EDrawThreadMethod::EMethod2:
+		{
+			Draw2();
+			break;
+		}
+	}
+	
 	return 1;
 }
 

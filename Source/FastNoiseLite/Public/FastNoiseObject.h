@@ -35,6 +35,15 @@ public:
 
 	UFUNCTION(BlueprintCallable,Category="FastNoiseObject")
 	void BP_FillDataToRenderTargetThread(UTextureRenderTarget2D* RenderTarget);
+
+	UPROPERTY(BlueprintReadWrite,Category="FastNoiseObject")
+	EDrawThreadMethod DrawThreadMethod = EDrawThreadMethod::EMethod1;
+	
+	UPROPERTY(BlueprintReadWrite,Category="FastNoiseObject")
+	float Thickness = 0.f;	
+
+	UFUNCTION(BlueprintCallable,Category="FastNoiseObject")
+	void BP_SetDrawThreadParam(EDrawThreadMethod InDrawThreadMethod,float InThickness);
 	
 	FNoiseCreateParams CacheCreateParams;
 private:

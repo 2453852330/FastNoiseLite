@@ -147,7 +147,13 @@ float UFastNoiseObject::BP_GetNoiseValue2D(int32 X, int32 Y)
 
 void UFastNoiseObject::BP_FillDataToRenderTargetThread(UTextureRenderTarget2D* RenderTarget)
 {
-	new FDrawRenderTargetThread(this,RenderTarget,GetWorld()->GetCanvasForRenderingToTarget());
+	new FDrawRenderTargetThread(this,RenderTarget,GetWorld()->GetCanvasForRenderingToTarget(),DrawThreadMethod,Thickness);
+}
+
+void UFastNoiseObject::BP_SetDrawThreadParam(EDrawThreadMethod InDrawThreadMethod, float InThickness)
+{
+	DrawThreadMethod = InDrawThreadMethod;
+	Thickness = InThickness;
 }
 
 FastNoiseLite::NoiseType UFastNoiseObject::ConvertNoise(EFastNoiseBPType NoiseBP) const

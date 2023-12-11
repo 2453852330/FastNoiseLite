@@ -1,5 +1,6 @@
 ﻿#pragma once
 
+enum class EDrawThreadMethod : uint8;
 class UFastNoiseObject;
 
 class FDrawRenderTargetThread : public FRunnable
@@ -10,11 +11,16 @@ class FDrawRenderTargetThread : public FRunnable
 	TWeakObjectPtr<UCanvas> Canvas = nullptr;
 	FTextureRenderTargetResource* RenderTargetResource = nullptr;
 	double start_time = 0.f;
+	EDrawThreadMethod DrawMethod;
+	float Thickness = 0.f;
+	void Draw1();
+	void Draw2();
 public:
 	
 	FDrawRenderTargetThread(TWeakObjectPtr<UFastNoiseObject> NoiseObject,TWeakObjectPtr<UTextureRenderTarget2D> RT,
-		TWeakObjectPtr<UCanvas> InCanvas
+		TWeakObjectPtr<UCanvas> InCanvas,
 		// FTextureRenderTargetResource* InRenderTargetResource
+		EDrawThreadMethod InDrawThreadMethod,float InThickness
 		);
 	
 	virtual void Exit() override;
@@ -24,5 +30,5 @@ public:
 
 	virtual ~FDrawRenderTargetThread() override;
 	
-
+	
 };
