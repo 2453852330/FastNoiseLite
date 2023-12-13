@@ -81,7 +81,7 @@ struct FNoiseCreateParams
 
 
 	UPROPERTY(EditAnywhere,BlueprintReadWrite,Category="NoiseCreateParam|Fractal")
-	EFractalBPType FractalType = EFractalBPType::FractalType_None;
+	EFractalBPType FractalType = EFractalBPType::FractalType_FBm;
 	UPROPERTY(EditAnywhere,BlueprintReadWrite,Category="NoiseCreateParam|Fractal")
 	int32 FractalOctaves = 3;
 	UPROPERTY(EditAnywhere,BlueprintReadWrite,Category="NoiseCreateParam|Fractal")
